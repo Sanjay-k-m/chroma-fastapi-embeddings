@@ -1,27 +1,21 @@
-from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, status
 
-from app.schemas import Note, NoteCreate, NoteListResponse
-from app.schemas.note_update_schema import NoteUpdate
+from app.core.embeddings import embed_text
+
+from app.schemas.note_schema import Note, NoteCreate, NoteListResponse, NoteUpdate
 from app.service.note_service import (
     list_notes_service,
     create_note_service,
     update_note_service,
     delete_note_service,
 )
+from app.service.search_service import search_notes_service
+from app.utils.datetime_utils import parse_datetime
+
+# from  app.core.search_engine import chroma_search
 
 notes_route = APIRouter()
-
-def parse_datetime(value: Any) -> Optional[datetime]:
-    """Convert stored ISO timestamp string to datetime, return None if invalid."""
-    if isinstance(value, str):
-        try:
-            return datetime.fromisoformat(value)
-        except ValueError:
-            return None
-    return None
-
 
 @notes_route.get(
     "/",
@@ -60,7 +54,8 @@ async def list_notes() -> NoteListResponse:
     summary="Create a new note"
 )
 async def create_note(item: NoteCreate):
-    note_id = await create_note_service(item)
+    embedding = embed_text(item.content)   # ✅ embedding done here
+    note_id = await create_note_service(item,embedding)
     return {"message": "Note created successfully", "note_id": note_id}
 
 
@@ -71,10 +66,20 @@ async def create_note(item: NoteCreate):
 )
 async def update_note(note_id: str, item: NoteUpdate):
     try:
-        await update_note_service(note_id, item)
+        embedding = None
+        
+        # Generate embedding only if content is updated
+        if item.content is not None and item.content.strip() != "":
+            embedding = embed_text(item.content)
+
+        await update_note_service(note_id, item, embedding=embedding)
         return {"message": "Note updated successfully", "note_id": note_id}
+
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Note not found"
+        )
 
 
 @notes_route.delete(
@@ -87,3 +92,17 @@ async def delete_note(note_id: str):
         await delete_note_service(note_id)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found")
+
+
+
+@notes_route.get(
+    "/search",
+    status_code=status.HTTP_200_OK,
+    summary="Semantic search notes"
+)
+async def search_notes(q: str, top_k: int = 5)->Dict[str,Any]:
+    results:List[Any] = await search_notes_service(q, top_k)
+    return {
+        "message": "Search results",
+        "results": results
+    }

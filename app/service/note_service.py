@@ -1,18 +1,17 @@
-from typing import Any, Dict, Sequence
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 from datetime import datetime, timezone
 from app.core.chroma_client import notes_collection
-from app.schemas import NoteCreate,NoteUpdate
+from app.schemas.note_schema import NoteCreate, NoteUpdate
+
 
 async def list_notes_service():
     return notes_collection.get()
 
 
-
-
-async def create_note_service(data: NoteCreate) -> str:
+async def create_note_service(data: NoteCreate, embedding: List[float]) -> str:
     note_id = str(uuid4())
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     notes_collection.add(
         ids=[note_id],
@@ -21,53 +20,52 @@ async def create_note_service(data: NoteCreate) -> str:
             "title": data.title,
             "created_at": now,
             "updated_at": now
-        }]
+        }],
+        embeddings=[embedding]
     )
-
     return note_id
 
 
-async def update_note_service(note_id: str, data: NoteUpdate) -> str:
-    """Update only the fields provided in the NoteUpdate payload."""
-
+async def update_note_service(note_id: str, data: NoteUpdate, embedding: Optional[List[float]]) -> str:
+    """Update a note and optionally update embedding if content changed."""
+    
     result = notes_collection.get(ids=[note_id])
-
     if not result or not result.get("ids"):
         raise ValueError("Note not found")
 
-    metadatas: Sequence[Any] = result.get("metadatas") or [{}]
-    documents: Sequence[Any] = result.get("documents") or [""]
+    metadatas = result.get("metadatas") or [{}]
+    documents: List[str] = result.get("documents") or [""]
 
-    # ✅ Convert metadata to dict safely
-    metadata = dict(metadatas[0]) if metadatas[0] else {}
-    current_content = str(documents[0]) if documents[0] else ""
+    metadata = dict(metadatas[0])
+    current_content = documents[0]
 
     new_content = data.content if data.content is not None else current_content
     new_title = data.title if data.title is not None else metadata.get("title", "")
 
-    updated_metadata : Dict[str,Any] = {
-        **metadata,  # <--- THIS means "copy metadata and overwrite keys below"
+    updated_metadata: Dict[str, Any] = {
+        **metadata,
         "title": new_title,
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
 
-    notes_collection.update(
-        ids=[note_id],
-        documents=[new_content],
-        metadatas=[updated_metadata]
-    )
+    update_params : Dict[str,Any] = {
+        "ids": [note_id],
+        "documents": [new_content],
+        "metadatas": [updated_metadata]
+    }
+
+    # ✅ Only update embeddings if content changed (embedding provided)
+    if embedding is not None:
+        update_params["embeddings"] = [embedding]
+
+    notes_collection.update(**update_params)
 
     return note_id
 
 
-
 async def delete_note_service(note_id: str) -> None:
-    """Delete a note by ID."""
-    
-    # Check if note exists
     result = notes_collection.get(ids=[note_id])
     if not result or not result.get("ids"):
         raise ValueError("Note not found")
 
-    # Perform delete
     notes_collection.delete(ids=[note_id])

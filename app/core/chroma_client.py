@@ -1,4 +1,3 @@
-# core/chroma_client.py
 import chromadb
 from chromadb.config import Settings
 
@@ -7,4 +6,7 @@ client = chromadb.PersistentClient(
     settings=Settings()
 )
 
-notes_collection = client.get_or_create_collection("notes")
+notes_collection = client.get_or_create_collection(
+    name="notes",
+    metadata={"hnsw:space": "cosine"}  # optional but recommended
+)
