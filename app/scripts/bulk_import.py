@@ -3,6 +3,8 @@ import os
 from uuid import uuid4
 from datetime import datetime, timezone
 from dotenv import load_dotenv
+from core.embeddings import embed_text
+from core.chroma_client import notes_collection
 
 # ✅ Ensure project root is added to PYTHONPATH
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -11,8 +13,6 @@ sys.path.append(ROOT_DIR)
 load_dotenv()  # load .env variables
 
 # ✅ Import after adjusting path
-from core.embeddings import embed_text
-from core.chroma_client import notes_collection
 
 # ✅ Your sample notes (title, content)
 notes = [

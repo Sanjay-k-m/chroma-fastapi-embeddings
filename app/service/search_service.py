@@ -1,12 +1,26 @@
-
 from typing import List
 from app.core.embeddings import embed_text
 from app.core.chroma_client import notes_collection
-from app.routes.notes import parse_datetime
+from app.utils.datetime_utils import parse_datetime
 from app.schemas.note_schema import NoteMetadata, NoteSearchResult
 
 
 async def search_notes_service(query: str, top_k: int = 5) -> List[NoteSearchResult]:
+    """
+    Perform semantic search on saved notes.
+
+    This function converts the input query text into an embedding vector,
+    performs a nearest-neighbor similarity search in the Chroma vector store,
+    and returns the top matched notes ordered by semantic relevance.
+
+    Args:
+        query (str): The search phrase to match against note content.
+        top_k (int): Number of most relevant notes to return. Defaults to 5.
+
+    Returns:
+        List[NoteSearchResult]: A list of search results including note content,
+        score, and metadata such as title and timestamps.
+    """
     query_embedding = embed_text(query)
 
     results = notes_collection.query(
@@ -23,6 +37,7 @@ async def search_notes_service(query: str, top_k: int = 5) -> List[NoteSearchRes
 
     for id_, doc, score, meta in zip(ids, docs, scores, metas):
         metadata = None
+
         if isinstance(meta, dict):
             metadata = NoteMetadata(
                 title=str(meta.get("title")),
@@ -32,9 +47,9 @@ async def search_notes_service(query: str, top_k: int = 5) -> List[NoteSearchRes
 
         matches.append(
             NoteSearchResult(
-                id=str(id_),
-                content=str(doc),
-                score=float(score),
+                id=id_,
+                content=doc,
+                score=score,
                 metadata=metadata
             )
         )
